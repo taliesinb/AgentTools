@@ -12,12 +12,37 @@ $ContextAliases[ "sp`" ] = "System`Private`";
 (* ::**************************************************************************************************************:: *)
 (* ::Section::Closed:: *)
 (*Argument Patterns*)
-$defaultCommandLineArguments = {
+(* Legacy launch: the paclet manager resolves AgentTools via PacletSymbol.
+   The manager costs ~2.1s of kernel startup. *)
+$legacyCommandLineArguments = {
     "-run",
     "PacletSymbol[\"Wolfram/AgentTools\",\"Wolfram`AgentTools`StartMCPServer\"][]",
     "-noinit",
     "-noprompt"
 };
+
+(* Fast launch: -nopaclet skips the paclet manager; the paclet is loaded from
+   its own directory (known at config-generation time) with PacletDirectoryLoad.
+   Every built-in tool still works. Falls back to the legacy args if the paclet
+   location cannot be resolved as a directory. *)
+fastCommandLineArguments[ ] :=
+    With[ { dir = Quiet @ $thisPaclet[ "Location" ] },
+        If[ StringQ @ dir && DirectoryQ @ dir,
+            fastCommandLineArguments @ dir,
+            $legacyCommandLineArguments
+        ]
+    ];
+
+fastCommandLineArguments[ dir_String ] := {
+    "-nopaclet",
+    "-noinit",
+    "-noprompt",
+    "-run",
+    "PacletDirectoryLoad[" <> ToString[ dir, InputForm ] <>
+        "]; Needs[\"Wolfram`AgentTools`\"]; Wolfram`AgentTools`StartMCPServer[]"
+};
+
+$defaultCommandLineArguments := fastCommandLineArguments[ ];
 
 $$transport = "StandardInputOutput" | "HTTP" | "ServerSentEvents";
 
