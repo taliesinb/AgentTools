@@ -114,6 +114,9 @@ $subcontexts = {
     (* Tools: CreateSymbolPacletDocumentation, EditSymbolPacletDocumentation *)
     "Wolfram`AgentTools`Tools`PacletDocumentation`",
 
+    (* Tools: Show *)
+    "Wolfram`AgentTools`Tools`Show`",
+
     (* Tools: SymbolDefinition *)
     "Wolfram`AgentTools`Tools`SymbolDefinition`",
 

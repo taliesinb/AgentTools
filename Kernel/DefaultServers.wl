@@ -39,7 +39,8 @@ $defaultMCPServers[ "Wolfram" ] := <|
         "Tools" -> {
             "WolframContext",
             "WolframLanguageEvaluator",
-            "WolframAlpha"
+            "WolframAlpha",
+            "Show"
         },
         "MCPPrompts" -> { "WolframSearch" }
     |>
@@ -82,7 +83,8 @@ $defaultMCPServers[ "WolframLanguage" ] := <|
             "WriteNotebook",
             "SymbolDefinition",
             "CodeInspector",
-            "TestReport"
+            "TestReport",
+            "Show"
         },
         "MCPPrompts" -> { "WolframLanguageSearch", "Notebook" }
     |>
