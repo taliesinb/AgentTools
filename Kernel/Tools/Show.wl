@@ -19,13 +19,14 @@ $showDirectoryName = "AgentToolsShow";
 (* ::Section::Closed:: *)
 (*Prompt*)
 $showToolDescription = "\
-Renders a Wolfram Language expression to a PNG image at Retina resolution.
+Renders a Wolfram Language expression to a PNG image at Retina resolution and displays it inline in the \
+session transcript.
 Use this to show the user a plot, graphic, grid, typeset expression, or any visual result.
 
-The expression is evaluated, rasterized, and written to a timestamped file whose name ends in an @Nx retina \
-suffix (e.g. @2x for 144 dpi) so other tools know the pixel density, and includes the hex hash of the PNG \
-contents. When the open parameter is true, the file is also opened with the system image viewer. Returns a \
-JSON object with the file path and image metadata (a client may match this to display the image inline).";
+The image appears directly in the transcript: a companion extension matches this tool's JSON output and \
+renders the file inline, so there is no separate window to open. The expression is evaluated, rasterized, and \
+written to a timestamped file whose name ends in an @Nx retina suffix (e.g. @2x for 144 dpi). Returns a JSON \
+object with the file path and image metadata.";
 
 (* ::**************************************************************************************************************:: *)
 (* ::Section::Closed:: *)
@@ -42,11 +43,6 @@ $defaultMCPTools[ "Show" ] := LLMTool @ <|
             "Interpreter" -> "String",
             "Help"        -> "The Wolfram Language expression to render and display (e.g. Plot[Sin[x], {x, 0, 2 Pi}]).",
             "Required"    -> True
-        |>,
-        "open" -> <|
-            "Interpreter" -> "Boolean",
-            "Help"        -> "Whether to also open the rendered image in the system viewer. Defaults to false; the image file is always written and reported regardless.",
-            "Required"    -> False
         |>
     }
 |>;
@@ -59,12 +55,11 @@ $defaultMCPTools[ "Show" ] := LLMTool @ <|
 (* ::Subsection::Closed:: *)
 (*showExpression*)
 (* Runs in the server kernel (not the sandboxed evaluator kernel) so file writes
-   and RunProcess["open", ...] are unrestricted. *)
+   are unrestricted. *)
 showExpression // beginDefinition;
 
-showExpression[ KeyValuePattern[ { "expression" -> code_String, "open" -> open0_ } ] ] := Enclose[
-    Module[ { open, held, image, bytes, hash, file, dims, scale },
-        open  = Replace[ open0, Except[ True | False ] -> False ];
+showExpression[ KeyValuePattern[ "expression" -> code_String ] ] := Enclose[
+    Module[ { held, image, bytes, hash, file, dims, scale },
         held  = ConfirmMatch[ Quiet @ ToExpression[ code, InputForm, HoldComplete ], HoldComplete[ _ ], "Parse" ];
         image = ConfirmMatch[ Rasterize[ ReleaseHold @ held, ImageResolution -> $imageResolution ], _Image, "Rasterize" ];
         bytes = ConfirmMatch[ ExportByteArray[ image, "PNG" ], _ByteArray, "Export" ];
@@ -73,7 +68,6 @@ showExpression[ KeyValuePattern[ { "expression" -> code_String, "open" -> open0_
         hash  = ConfirmBy[ StringTake[ Hash[ bytes, "MD5", "HexString" ], 8 ], StringQ, "Hash" ];
         file  = ConfirmBy[ writeImageFile[ hash, bytes ], StringQ, "Write" ];
         ConfirmAssert[ FileExistsQ @ file, "FileExists" ];
-        If[ open, ConfirmMatch[ openImageFile @ file, Except[ _Failure ], "Open" ] ];
         dims  = ImageDimensions @ image;
         scale = $imageResolution / 72; (* 144 dpi -> 2 *)
         (* Emit a single JSON object describing the rendered image. A client
@@ -91,8 +85,7 @@ showExpression[ KeyValuePattern[ { "expression" -> code_String, "open" -> open0_
                 "points"       -> <| "width" -> Round[ First @ dims / scale ], "height" -> Round[ Last @ dims / scale ] |>,
                 "resolution"   -> $imageResolution,
                 "scale"        -> scale,
-                "bytes"        -> Length @ bytes,
-                "opened"       -> open
+                "bytes"        -> Length @ bytes
             |>,
             StringQ,
             "JSON"
@@ -126,19 +119,6 @@ writeImageFile[ hash_String, bytes_ByteArray ] := Enclose[
 ];
 
 writeImageFile // endDefinition;
-
-(* ::**************************************************************************************************************:: *)
-(* ::Subsection::Closed:: *)
-(*openImageFile*)
-openImageFile // beginDefinition;
-
-openImageFile[ file_String ] :=
-    If[ $OperatingSystem === "MacOSX",
-        RunProcess[ { "open", file } ],
-        SystemOpen @ file
-    ];
-
-openImageFile // endDefinition;
 
 (* ::**************************************************************************************************************:: *)
 (* ::Section::Closed:: *)
