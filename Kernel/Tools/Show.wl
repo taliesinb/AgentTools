@@ -22,9 +22,10 @@ $showToolDescription = "\
 Renders a Wolfram Language expression to a PNG image at Retina resolution.
 Use this to show the user a plot, graphic, grid, typeset expression, or any visual result.
 
-The expression is evaluated, rasterized, and written to a file named by the hex hash of the PNG contents. When \
-the open parameter is true, the file is also opened with the system image viewer so the user sees it. Returns \
-the file path, pixel dimensions, resolution, byte size, and whether it was opened.";
+The expression is evaluated, rasterized, and written to a timestamped file whose name ends in an @Nx retina \
+suffix (e.g. @2x for 144 dpi) so other tools know the pixel density, and includes the hex hash of the PNG \
+contents. When the open parameter is true, the file is also opened with the system image viewer so the user \
+sees it. Returns the file path, pixel dimensions, resolution, byte size, and whether it was opened.";
 
 (* ::**************************************************************************************************************:: *)
 (* ::Section::Closed:: *)
@@ -95,10 +96,13 @@ showExpression // endDefinition;
 writeImageFile // beginDefinition;
 
 writeImageFile[ hash_String, bytes_ByteArray ] := Enclose[
-    Module[ { dir, file, stream },
+    Module[ { dir, timestamp, scale, name, file, stream },
         dir = FileNameJoin @ { $UserBaseDirectory, $showDirectoryName };
         If[ ! DirectoryQ @ dir, ConfirmBy[ CreateDirectory[ dir, CreateIntermediateDirectories -> True ], DirectoryQ, "CreateDirectory" ] ];
-        file = FileNameJoin @ { dir, hash <> ".png" };
+        timestamp = DateString[ { "Year", "-", "Month", "-", "Day", "-", "Hour", "-", "Minute", "-", "Second" } ];
+        scale = $imageResolution / 72; (* 144 dpi -> 2, i.e. @2x *)
+        name = timestamp <> "-" <> hash <> "@" <> ToString @ scale <> "x.png";
+        file = FileNameJoin @ { dir, name };
         If[ ! FileExistsQ @ file,
             stream = ConfirmMatch[ OpenWrite[ file, BinaryFormat -> True ], _OutputStream, "OpenWrite" ];
             WithCleanup[ BinaryWrite[ stream, bytes ], Close @ stream ]
