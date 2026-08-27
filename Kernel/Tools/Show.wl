@@ -24,8 +24,8 @@ Use this to show the user a plot, graphic, grid, typeset expression, or any visu
 
 The expression is evaluated, rasterized, and written to a timestamped file whose name ends in an @Nx retina \
 suffix (e.g. @2x for 144 dpi) so other tools know the pixel density, and includes the hex hash of the PNG \
-contents. When the open parameter is true, the file is also opened with the system image viewer so the user \
-sees it. Returns the file path, pixel dimensions, resolution, byte size, and whether it was opened.";
+contents. When the open parameter is true, the file is also opened with the system image viewer. Returns a \
+JSON object with the file path and image metadata (a client may match this to display the image inline).";
 
 (* ::**************************************************************************************************************:: *)
 (* ::Section::Closed:: *)
@@ -45,8 +45,8 @@ $defaultMCPTools[ "Show" ] := LLMTool @ <|
         |>,
         "open" -> <|
             "Interpreter" -> "Boolean",
-            "Help"        -> "Whether to open the rendered image in the system viewer so the user sees it on screen. If false, the image is written to disk but not opened.",
-            "Required"    -> True
+            "Help"        -> "Whether to also open the rendered image in the system viewer. Defaults to false; the image file is always written and reported regardless.",
+            "Required"    -> False
         |>
     }
 |>;
@@ -63,7 +63,7 @@ $defaultMCPTools[ "Show" ] := LLMTool @ <|
 showExpression // beginDefinition;
 
 showExpression[ KeyValuePattern[ { "expression" -> code_String, "open" -> open0_ } ] ] := Enclose[
-    Module[ { open, held, image, bytes, hash, file, dims },
+    Module[ { open, held, image, bytes, hash, file, dims, scale },
         open  = Replace[ open0, Except[ True | False ] -> False ];
         held  = ConfirmMatch[ Quiet @ ToExpression[ code, InputForm, HoldComplete ], HoldComplete[ _ ], "Parse" ];
         image = ConfirmMatch[ Rasterize[ ReleaseHold @ held, ImageResolution -> $imageResolution ], _Image, "Rasterize" ];
@@ -73,16 +73,27 @@ showExpression[ KeyValuePattern[ { "expression" -> code_String, "open" -> open0_
         ConfirmAssert[ FileExistsQ @ file, "FileExists" ];
         If[ open, ConfirmMatch[ openImageFile @ file, Except[ _Failure ], "Open" ] ];
         dims  = ImageDimensions @ image;
-        StringRiffle[
-            {
-                "Rendered image:",
-                "- path: " <> file,
-                "- dimensions: " <> ToString @ First @ dims <> "x" <> ToString @ Last @ dims <> " px",
-                "- resolution: " <> ToString @ $imageResolution <> " dpi",
-                "- size: " <> ToString @ Length @ bytes <> " bytes",
-                "- opened: " <> If[ open, "true", "false" ]
-            },
-            "\n"
+        scale = $imageResolution / 72; (* 144 dpi -> 2 *)
+        (* Emit a single JSON object describing the rendered image. A client
+           extension can match { "type": "image", "path": ... } and display it
+           inline; other clients read the metadata directly. *)
+        ConfirmBy[
+            Developer`WriteRawJSONString @ <|
+                "type"         -> "image",
+                "source"       -> "WolframShow",
+                "path"         -> file,
+                "format"       -> "PNG",
+                (* Actual pixels in the PNG (rendered at 144 dpi, i.e. 2x). *)
+                "devicePixels" -> <| "width" -> First @ dims, "height" -> Last @ dims |>,
+                (* Logical size in points: devicePixels / scale. *)
+                "points"       -> <| "width" -> Round[ First @ dims / scale ], "height" -> Round[ Last @ dims / scale ] |>,
+                "resolution"   -> $imageResolution,
+                "scale"        -> scale,
+                "bytes"        -> Length @ bytes,
+                "opened"       -> open
+            |>,
+            StringQ,
+            "JSON"
         ]
     ],
     throwInternalFailure
