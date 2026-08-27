@@ -19,11 +19,12 @@ $showDirectoryName = "AgentToolsShow";
 (* ::Section::Closed:: *)
 (*Prompt*)
 $showToolDescription = "\
-Renders a Wolfram Language expression to a PNG image at Retina resolution and opens it on the user's screen.
+Renders a Wolfram Language expression to a PNG image at Retina resolution.
 Use this to show the user a plot, graphic, grid, typeset expression, or any visual result.
 
-The expression is evaluated, rasterized, written to a file named by the hex hash of the PNG contents, and opened \
-with the system image viewer. Returns the file path and pixel dimensions.";
+The expression is evaluated, rasterized, and written to a file named by the hex hash of the PNG contents. When \
+the open parameter is true, the file is also opened with the system image viewer so the user sees it. Returns \
+the file path, pixel dimensions, resolution, byte size, and whether it was opened.";
 
 (* ::**************************************************************************************************************:: *)
 (* ::Section::Closed:: *)
@@ -40,6 +41,11 @@ $defaultMCPTools[ "Show" ] := LLMTool @ <|
             "Interpreter" -> "String",
             "Help"        -> "The Wolfram Language expression to render and display (e.g. Plot[Sin[x], {x, 0, 2 Pi}]).",
             "Required"    -> True
+        |>,
+        "open" -> <|
+            "Interpreter" -> "Boolean",
+            "Help"        -> "Whether to open the rendered image in the system viewer so the user sees it on screen. If false, the image is written to disk but not opened.",
+            "Required"    -> True
         |>
     }
 |>;
@@ -55,17 +61,28 @@ $defaultMCPTools[ "Show" ] := LLMTool @ <|
    and RunProcess["open", ...] are unrestricted. *)
 showExpression // beginDefinition;
 
-showExpression[ KeyValuePattern[ "expression" -> code_String ] ] := Enclose[
-    Module[ { held, image, bytes, hash, file, dims },
+showExpression[ KeyValuePattern[ { "expression" -> code_String, "open" -> open0_ } ] ] := Enclose[
+    Module[ { open, held, image, bytes, hash, file, dims },
+        open  = Replace[ open0, Except[ True | False ] -> False ];
         held  = ConfirmMatch[ Quiet @ ToExpression[ code, InputForm, HoldComplete ], HoldComplete[ _ ], "Parse" ];
         image = ConfirmMatch[ Rasterize[ ReleaseHold @ held, ImageResolution -> $imageResolution ], _Image, "Rasterize" ];
         bytes = ConfirmMatch[ ExportByteArray[ image, "PNG" ], _ByteArray, "Export" ];
         hash  = ConfirmBy[ Hash[ bytes, "SHA256", "HexString" ], StringQ, "Hash" ];
         file  = ConfirmBy[ writeImageFile[ hash, bytes ], StringQ, "Write" ];
         ConfirmAssert[ FileExistsQ @ file, "FileExists" ];
-        ConfirmMatch[ openImageFile @ file, Except[ _Failure ], "Open" ];
+        If[ open, ConfirmMatch[ openImageFile @ file, Except[ _Failure ], "Open" ] ];
         dims  = ImageDimensions @ image;
-        "Displayed image (" <> ToString @ First @ dims <> "x" <> ToString @ Last @ dims <> " px): " <> file
+        StringRiffle[
+            {
+                "Rendered image:",
+                "- path: " <> file,
+                "- dimensions: " <> ToString @ First @ dims <> "x" <> ToString @ Last @ dims <> " px",
+                "- resolution: " <> ToString @ $imageResolution <> " dpi",
+                "- size: " <> ToString @ Length @ bytes <> " bytes",
+                "- opened: " <> If[ open, "true", "false" ]
+            },
+            "\n"
+        ]
     ],
     throwInternalFailure
 ];
