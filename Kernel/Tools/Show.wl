@@ -68,7 +68,9 @@ showExpression[ KeyValuePattern[ { "expression" -> code_String, "open" -> open0_
         held  = ConfirmMatch[ Quiet @ ToExpression[ code, InputForm, HoldComplete ], HoldComplete[ _ ], "Parse" ];
         image = ConfirmMatch[ Rasterize[ ReleaseHold @ held, ImageResolution -> $imageResolution ], _Image, "Rasterize" ];
         bytes = ConfirmMatch[ ExportByteArray[ image, "PNG" ], _ByteArray, "Export" ];
-        hash  = ConfirmBy[ Hash[ bytes, "SHA256", "HexString" ], StringQ, "Hash" ];
+        (* Short content tag: 8 hex chars of MD5. Not for security, just a
+           compact filename disambiguator. *)
+        hash  = ConfirmBy[ StringTake[ Hash[ bytes, "MD5", "HexString" ], 8 ], StringQ, "Hash" ];
         file  = ConfirmBy[ writeImageFile[ hash, bytes ], StringQ, "Write" ];
         ConfirmAssert[ FileExistsQ @ file, "FileExists" ];
         If[ open, ConfirmMatch[ openImageFile @ file, Except[ _Failure ], "Open" ] ];
